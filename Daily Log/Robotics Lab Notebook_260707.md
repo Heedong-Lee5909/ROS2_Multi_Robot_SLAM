@@ -332,32 +332,172 @@ xacro /opt/ros/humble/share/turtlebot3_description/urdf/turtlebot3_burger.urdf
 
 # Questions & Notes
 
-### Why is OpaqueFunction required?
+---
 
-`LaunchConfiguration` is not a Python variable. Its value is only available after the Launch System starts.
+# Interview Quiz
 
-LaunchConfiguration는 Python 변수가 아니라 Launch 실행 시 결정되는 값이므로 OpaqueFunction 내부에서 사용해야 한다.
+## Q1. Why couldn't you use `LaunchConfiguration("num_robots")` directly inside `range()`?
+
+### Answer
+
+`LaunchConfiguration` does not return a Python integer.
+
+Instead, it returns a **Launch substitution (placeholder)** whose value is resolved only when the ROS2 Launch System executes.
+
+Since `range()` requires an integer, `LaunchConfiguration` must first be converted into an actual value using `perform(context)`.
+
+LaunchConfiguration은 Python의 int를 반환하지 않는다.
+
+대신 **Launch 실행 시 결정되는 Placeholder 객체**를 반환한다.
+
+`range()`는 int 타입만 사용할 수 있으므로, `perform(context)`를 이용하여 실제 값으로 변환해야 한다.
+
+```python
+num_robots = int(
+    LaunchConfiguration("num_robots").perform(context)
+)
+```
 
 ---
 
-### Why can't LaunchConfiguration be used inside `range()`?
+## Q2. What problem does `OpaqueFunction` solve?
 
-`range()` requires an integer, while `LaunchConfiguration` is only a launch substitution object.
+### Answer
 
-range()는 int를 요구하지만 LaunchConfiguration은 Placeholder 객체이므로 사용할 수 없다.
+`OpaqueFunction` executes a Python function **after** the ROS2 Launch System has resolved all Launch Arguments.
+
+This allows `LaunchConfiguration` placeholders to be converted into actual Python values.
+
+`OpaqueFunction`은 ROS2 Launch System이 Launch Argument를 모두 해석한 이후 Python 함수를 실행하는 Action이다.
+
+따라서 `LaunchConfiguration`이 가지고 있는 Placeholder를 실제 Python 값으로 변환하여 사용할 수 있다.
+
+Without `OpaqueFunction`, runtime launch arguments cannot be used inside normal Python logic.
+
+OpaqueFunction이 없다면 Launch Argument를 일반 Python 코드에서 사용할 수 없다.
 
 ---
 
-### What is the role of robot_state_publisher?
+## Q3. What is the difference between `DeclareLaunchArgument` and `LaunchConfiguration`?
 
-It reads a robot model (URDF) and publishes the TF tree.
+### Answer
 
-URDF를 읽어 TF Tree를 생성하는 역할을 수행한다.
+| Component | Description |
+|-----------|-------------|
+| `DeclareLaunchArgument` | Declares a launch argument. |
+| `LaunchConfiguration` | Retrieves the value of the launch argument. |
+
+| 구성 요소 | 설명 |
+|-----------|------|
+| `DeclareLaunchArgument` | Launch Argument를 선언한다. |
+| `LaunchConfiguration` | 선언된 Launch Argument의 값을 가져온다. |
+
+Example
+
+```python
+DeclareLaunchArgument(
+    "num_robots",
+    default_value="3"
+)
+```
+
+↓
+
+```python
+LaunchConfiguration("num_robots")
+```
+
+Think of it as
+
+```
+DeclareLaunchArgument
+        ↓
+Variable Declaration
+
+LaunchConfiguration
+        ↓
+Variable Access
+```
+
+즉,
+
+```
+DeclareLaunchArgument
+        ↓
+변수 선언
+
+LaunchConfiguration
+        ↓
+변수 사용
+```
 
 ---
 
-### What is the relationship between Xacro and URDF?
+## Q4. Why is `robot_state_publisher` unable to run without `robot_description`?
 
-Xacro is converted into a standard URDF before being consumed by `robot_state_publisher`.
+### Answer
 
-robot_state_publisher는 Xacro가 아닌 변환된 URDF를 입력으로 사용한다.
+`robot_state_publisher` generates the robot's TF Tree from the robot model.
+
+Without `robot_description` (URDF), it does not know the robot's Links or Joints and therefore cannot publish TF.
+
+`robot_state_publisher`는 Robot Model(URDF)을 읽어 TF Tree를 생성한다.
+
+URDF가 없으면 Robot의 Link와 Joint 정보를 알 수 없으므로 TF를 생성할 수 없다.
+
+Flow
+
+```
+URDF
+    │
+    ▼
+robot_state_publisher
+    │
+    ▼
+TF Tree
+```
+
+---
+
+## Q5. Why does ROS2 use Xacro before passing the robot model to `robot_state_publisher`?
+
+### Answer
+
+Xacro improves **reusability** and **maintainability**.
+
+Instead of creating multiple large URDF files with duplicated content, common robot components can be shared using Xacro.
+
+Xacro는 **재사용성(Reusability)** 과 **유지보수성(Maintainability)** 을 향상시키기 위해 사용된다.
+
+공통되는 Robot Model을 하나의 Xacro 파일로 관리하고, 필요한 부분만 변경하여 여러 Robot Model을 생성할 수 있다.
+
+Benefits
+
+- Reduce duplicated code
+- Improve maintainability
+- Improve reusability
+- Support multiple robot models
+
+장점
+
+- 코드 중복 감소
+- 유지보수성 향상
+- 재사용성 향상
+- 여러 Robot Model 지원
+
+Flow
+
+```
+Xacro
+    │
+    ▼
+URDF
+    │
+    ▼
+robot_state_publisher
+    │
+    ▼
+TF Tree
+```
+
+---
