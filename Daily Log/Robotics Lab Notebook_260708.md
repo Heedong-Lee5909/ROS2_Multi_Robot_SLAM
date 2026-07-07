@@ -488,3 +488,86 @@ robot_state_publisher가 생성하는 TF Frame 이름 앞에 Prefix를 추가한
 Because it is published by the Gazebo Diff Drive Plugin rather than by `robot_state_publisher`.
 
 odom TF는 robot_state_publisher가 아닌 Gazebo Diff Drive Plugin이 Publish하기 때문이다.
+
+---
+
+# What is TF?
+
+TF (Transform) is a ROS2 framework that represents the spatial relationship between coordinate frames.
+
+TF는 여러 좌표계(Frame) 사이의 **위치(Position)** 와 **방향(Orientation)** 관계를 표현하는 ROS2 프레임워크이다.
+
+For example,
+
+```
+base_link
+    │
+    ▼
+base_scan
+```
+
+means the LiDAR (`base_scan`) is mounted at a fixed position relative to the robot body (`base_link`).
+
+예를 들어 위 관계는 LiDAR(`base_scan`)가 Robot 본체(`base_link`)를 기준으로 일정한 위치에 장착되어 있음을 의미한다.
+
+---
+
+# What is a TF Tree?
+
+A TF Tree is a hierarchical structure that connects multiple coordinate frames.
+
+TF Tree는 여러 좌표계(Frame)를 부모-자식 관계로 연결한 계층 구조이다.
+
+Example
+
+```
+odom
+└── base_footprint
+    └── base_link
+        ├── base_scan
+        ├── imu_link
+        ├── wheel_left_link
+        └── wheel_right_link
+```
+
+Each child frame is defined relative to its parent frame.
+
+각 Child Frame은 Parent Frame을 기준으로 자신의 위치와 자세를 정의한다.
+
+For example,
+
+- `base_footprint` is expressed relative to `odom`.
+- `base_link` is expressed relative to `base_footprint`.
+- `base_scan` is expressed relative to `base_link`.
+
+즉,
+
+- `base_footprint`는 `odom`을 기준으로 정의되고,
+- `base_link`는 `base_footprint`를 기준으로 정의되며,
+- `base_scan`은 `base_link`를 기준으로 정의된다.
+
+---
+
+# Why is TF Important?
+
+Many ROS2 packages depend on TF.
+
+ROS2의 대부분의 기능은 TF를 기반으로 동작한다.
+
+Examples
+
+- RViz displays the robot model using TF.
+- SLAM estimates the robot pose using TF.
+- Navigation2 plans paths using TF.
+- MoveIt2 computes robot kinematics using TF.
+
+예를 들어
+
+- RViz는 TF를 이용하여 Robot Model을 표시한다.
+- SLAM은 TF를 이용하여 Robot의 위치를 추정한다.
+- Navigation2는 TF를 이용하여 경로를 계획한다.
+- MoveIt2는 TF를 이용하여 Robot의 운동학을 계산한다.
+
+Without a correct TF Tree, these packages cannot operate properly.
+
+올바른 TF Tree가 없으면 이러한 ROS2 패키지들은 정상적으로 동작할 수 없다.
