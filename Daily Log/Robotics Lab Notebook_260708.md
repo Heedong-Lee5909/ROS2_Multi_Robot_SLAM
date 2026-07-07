@@ -1,0 +1,490 @@
+# 07. Robot State Publisher & TF Tree (Part 1)
+
+## Objective
+
+Understand how `robot_state_publisher` generates the robot's TF Tree from a URDF model and how to separate TF Frames in a Multi-Robot system using `frame_prefix`.
+
+`robot_state_publisher`가 URDF를 이용하여 TF Tree를 생성하는 원리를 이해하고, `frame_prefix`를 이용하여 Multi-Robot 환경에서 TF Frame을 분리하는 방법을 학습한다.
+
+---
+
+# 1. Why is robot_state_publisher Needed?
+
+Previously, robots were successfully spawned in Gazebo.
+
+기존에는 Gazebo에서 Robot 생성까지는 성공하였다.
+
+However, Gazebo only spawns the robot model.
+
+하지만 Gazebo는 Robot Model을 생성할 뿐이다.
+
+To publish the robot's TF Tree, another node is required.
+
+Robot의 TF Tree를 생성하기 위해서는 별도의 Node가 필요하다.
+
+That node is
+
+```
+robot_state_publisher
+```
+
+---
+
+# 2. Running robot_state_publisher Alone
+
+Executed
+
+```bash
+ros2 run robot_state_publisher robot_state_publisher
+```
+
+Result
+
+```text
+[FATAL]
+robot_description parameter must not be empty
+```
+
+### Observation
+
+`robot_state_publisher` requires a robot model (`robot_description`) before it can publish TF.
+
+robot_state_publisher는 TF를 생성하기 위해 robot_description(URDF)이 반드시 필요하다.
+
+---
+
+# 3. Exploring TurtleBot3 URDF
+
+Checked the TurtleBot3 URDF files.
+
+```bash
+ls /opt/ros/humble/share/turtlebot3_description/urdf
+```
+
+```
+turtlebot3_burger.urdf
+```
+
+Observed
+
+```xml
+<xacro:arg name="namespace" default=""/>
+```
+
+The TurtleBot3 robot model is designed to receive a namespace.
+
+TurtleBot3 URDF는 Namespace를 전달받도록 설계되어 있다.
+
+---
+
+# 4. Xacro → URDF
+
+Executed
+
+```bash
+xacro turtlebot3_burger.urdf
+```
+
+Verified that Xacro expands into a normal URDF.
+
+Xacro가 일반 URDF(XML)로 변환되는 것을 확인하였다.
+
+Flow
+
+```
+Xacro
+    │
+    ▼
+URDF
+```
+
+---
+
+# 5. Command()
+
+Added
+
+```python
+from launch.substitutions import Command
+```
+
+Created
+
+```python
+robot_description = Command([
+    "xacro ",
+    "/.../turtlebot3_burger.urdf"
+])
+```
+
+### Purpose
+
+Automatically execute `xacro` during launch and generate a URDF string.
+
+Launch 실행 시 xacro를 자동 실행하여 URDF 문자열을 생성한다.
+
+---
+
+# 6. Adding robot_state_publisher
+
+Created
+
+```python
+def robot_state_publisher_node(namespace):
+
+    robot_description = Command([...])
+
+    return Node(
+        package="robot_state_publisher",
+        executable="robot_state_publisher",
+        namespace=namespace,
+        parameters=[
+            {
+                "robot_description": robot_description
+            }
+        ]
+    )
+```
+
+Each robot now owns its own `robot_state_publisher`.
+
+각 Robot이 독립적인 robot_state_publisher를 가지도록 구성하였다.
+
+---
+
+# 7. Launching One robot_state_publisher per Robot
+
+Inside
+
+```python
+spawn_robots()
+```
+
+added
+
+```python
+actions.append(
+    robot_state_publisher_node(f"tb3_{i}")
+)
+```
+
+Result
+
+```
+Robot 1
+ ├── spawn_entity.py
+ └── robot_state_publisher
+
+Robot 2
+ ├── spawn_entity.py
+ └── robot_state_publisher
+
+Robot 3
+ ├── spawn_entity.py
+ └── robot_state_publisher
+```
+
+---
+
+# 8. Verifying Nodes
+
+Executed
+
+```bash
+ros2 node list
+```
+
+Verified
+
+```
+/tb3_0/robot_state_publisher
+/tb3_1/robot_state_publisher
+/tb3_2/robot_state_publisher
+```
+
+Each Robot successfully launched its own robot_state_publisher.
+
+각 Robot마다 robot_state_publisher가 독립적으로 실행되는 것을 확인하였다.
+
+---
+
+# 9. robot_description
+
+Verified
+
+```bash
+ros2 topic list | grep robot_description
+```
+
+```
+/tb3_0/robot_description
+/tb3_1/robot_description
+/tb3_2/robot_description
+```
+
+Observed
+
+```bash
+ros2 topic echo /tb3_0/robot_description --once
+```
+
+The published data was a complete URDF XML string.
+
+Publish된 데이터가 URDF(XML) 문자열임을 확인하였다.
+
+Flow
+
+```
+Xacro
+    │
+    ▼
+URDF(XML)
+    │
+    ▼
+robot_description
+    │
+    ▼
+robot_state_publisher
+```
+
+---
+
+# 10. TF Tree
+
+Generated
+
+```bash
+ros2 run tf2_tools view_frames
+```
+
+Observed
+
+```
+odom
+└── base_footprint
+    └── base_link
+        ├── base_scan
+        ├── imu_link
+        ├── caster_back_link
+        ├── wheel_left_link
+        └── wheel_right_link
+```
+
+The TF Tree is generated from the URDF.
+
+TF Tree가 URDF를 기반으로 생성되는 것을 확인하였다.
+
+---
+
+# 11. frame_prefix
+
+Checked
+
+```bash
+ros2 param list /tb3_0/robot_state_publisher
+```
+
+Found
+
+```
+frame_prefix
+```
+
+Added
+
+```python
+parameters=[
+    {
+        "robot_description": robot_description,
+        "frame_prefix": f"{namespace}/"
+    }
+]
+```
+
+---
+
+# 12. Effect of frame_prefix
+
+Before
+
+```
+base_link
+base_scan
+imu_link
+```
+
+After
+
+```
+tb3_0/base_link
+tb3_0/base_scan
+tb3_0/imu_link
+
+tb3_1/base_link
+tb3_1/base_scan
+tb3_1/imu_link
+
+tb3_2/base_link
+tb3_2/base_scan
+tb3_2/imu_link
+```
+
+Verified that each robot now owns independent TF Frames.
+
+각 Robot이 독립적인 TF Frame을 가지도록 분리되었다.
+
+---
+
+# 13. Remaining Problem
+
+The following TF still remained.
+
+```
+odom
+    │
+    ▼
+base_footprint
+```
+
+Reason
+
+The Gazebo Diff Drive Plugin publishes the odometry TF.
+
+Gazebo Diff Drive Plugin이 odom TF를 Publish하기 때문이다.
+
+Therefore,
+
+`frame_prefix` only affects TF generated by `robot_state_publisher`.
+
+`frame_prefix`는 robot_state_publisher가 생성하는 TF에만 적용된다.
+
+It does **not** modify TF generated by Gazebo plugins.
+
+Gazebo Plugin이 Publish하는 TF에는 영향을 주지 않는다.
+
+---
+
+# System Architecture
+
+```
+URDF(Xacro)
+        │
+        ▼
+Command()
+        │
+        ▼
+robot_description
+        │
+        ▼
+robot_state_publisher
+        │
+        ▼
+TF
+```
+
+Gazebo
+
+```
+spawn_entity.py
+        │
+        ▼
+Robot Model
+```
+
+---
+
+# Key Concepts Learned
+
+- robot_state_publisher
+- robot_description
+- Command()
+- Xacro
+- URDF
+- TF Tree
+- frame_prefix
+- Gazebo Plugin
+- Topic Namespace
+- TF Frame
+- Multi-Robot TF
+
+---
+
+# Commands Used
+
+```bash
+ros2 run robot_state_publisher robot_state_publisher
+```
+
+```bash
+ls /opt/ros/humble/share/turtlebot3_description/urdf
+```
+
+```bash
+head -20 turtlebot3_burger.urdf
+```
+
+```bash
+xacro turtlebot3_burger.urdf
+```
+
+```bash
+ros2 node list
+```
+
+```bash
+ros2 topic list | grep robot_description
+```
+
+```bash
+ros2 topic echo /tb3_0/robot_description --once
+```
+
+```bash
+ros2 run tf2_tools view_frames
+```
+
+```bash
+ros2 param list /tb3_0/robot_state_publisher
+```
+
+---
+
+# Questions & Notes
+
+### What is the role of robot_state_publisher?
+
+It reads the robot model (URDF) and publishes the TF Tree.
+
+URDF를 읽어 Robot의 TF Tree를 생성한다.
+
+---
+
+### What is robot_description?
+
+A parameter (and published description) containing the robot's URDF.
+
+Robot의 URDF를 담고 있는 Parameter(및 Publish되는 Robot Model 정보)이다.
+
+---
+
+### What is Command()?
+
+Launch executes the specified command during runtime and stores the output.
+
+Launch 실행 시 지정된 명령어를 실행하고 결과를 반환하는 Substitution이다.
+
+---
+
+### What is frame_prefix?
+
+Adds a prefix to TF Frames generated by `robot_state_publisher`.
+
+robot_state_publisher가 생성하는 TF Frame 이름 앞에 Prefix를 추가한다.
+
+---
+
+### Why did odom remain unchanged?
+
+Because it is published by the Gazebo Diff Drive Plugin rather than by `robot_state_publisher`.
+
+odom TF는 robot_state_publisher가 아닌 Gazebo Diff Drive Plugin이 Publish하기 때문이다.
