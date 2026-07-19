@@ -1,136 +1,112 @@
-# Part 3. Debugging LaserScan Visualization
+# Part 3. Building a Dynamic Multi-Robot Launch System
 
 ## Objective
 
-After successfully visualizing the RobotModel and TF Tree, the final step was to display the LaserScan data in RViz.
+In the previous sections, each TurtleBot3 was successfully visualized in RViz.
 
-Although the LaserScan topic was published correctly, the scan was not visualized. In this section, the cause of the problem is investigated and resolved by modifying the Gazebo sensor configuration.
+However, the launch file still required several manual configurations, including static TF creation, SDF modification, and robot spawning.
 
-RobotModel과 TF Tree를 성공적으로 시각화한 이후, 마지막으로 LaserScan 데이터를 RViz에 표시하였다.
+In this section, the launch system is redesigned to automatically generate all required resources for an arbitrary number of robots.
 
-LaserScan Topic은 정상적으로 Publish되고 있었지만 RViz에는 표시되지 않았다. 이번 파트에서는 문제의 원인을 분석하고 Gazebo Sensor 설정을 수정하여 이를 해결한다.
+앞선 파트에서는 각 TurtleBot3를 RViz에서 정상적으로 시각화하였다.
 
----
+하지만 Launch 파일에는 Static TF 생성, SDF 수정, Robot Spawn과 같은 작업이 수동으로 이루어지고 있었다.
 
-# 1. Adding the LaserScan Display
-
-To visualize LiDAR data, a **LaserScan** display was added in RViz.
-
-LiDAR 데이터를 시각화하기 위해 RViz에서 **LaserScan** Display를 추가하였다.
-
-The Topic was configured as
-
-```
-/tb3_0/scan
-```
-
-However, no scan data appeared in the RViz window.
-
-Topic은 정상적으로 선택되었지만 화면에는 아무것도 표시되지 않았다.
-
-Since no warning was shown in RViz, the problem required further investigation.
-
-RViz에서도 명확한 오류가 나타나지 않았기 때문에 원인을 직접 확인하기로 하였다.
+이번 파트에서는 이러한 과정을 자동화하여 원하는 개수의 Robot을 동적으로 생성할 수 있는 Multi-Robot Launch System을 구축한다.
 
 ---
 
-# 2. Verifying the LaserScan Topic
+# 1. Creating Static World Transforms
 
-The first step was to verify whether the LiDAR sensor was actually publishing data.
+Although each robot published its own TF Tree, all robots still required a common parent frame.
 
-먼저 LiDAR 센서가 정상적으로 데이터를 Publish하고 있는지 확인하였다.
+각 Robot은 독립적인 TF Tree를 생성하지만, 모든 Robot을 하나의 좌표계에서 표현하기 위해서는 공통 부모 Frame이 필요하다.
 
-```bash
-ros2 topic echo /tb3_0/scan --once
+To automate this process, a helper function named `static_tf_node()` was implemented.
+
+이를 자동화하기 위해 `static_tf_node()` 함수를 구현하였다.
+
+```python
+def static_tf_node(namespace):
+    return Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        ...
+    )
 ```
 
-The following message was received.
+This function automatically creates
 
-```yaml
-header:
-  frame_id: base_scan
-
-ranges:
-- inf
-- inf
-- 2.84
-- 2.76
-...
+```
+world
+    │
+    ▼
+tb3_x/odom
 ```
 
-The message confirmed that the LiDAR sensor was operating correctly.
+for every robot.
 
-LiDAR Sensor 자체는 정상적으로 동작하고 있음을 확인하였다.
-
-Since the topic was being published correctly, the problem was not related to the sensor.
-
-즉, 문제는 Sensor가 아니라 RViz가 데이터를 변환하는 과정에 있다고 판단하였다.
+이를 통해 모든 Robot이 하나의 World Frame 아래에 연결되도록 구성하였다.
 
 ---
 
-# 3. Investigating the frame_id
+# 2. Dynamically Generating SDF Files
 
-The next step was to compare the LaserScan frame with the TF Tree.
+The default TurtleBot3 SDF model contains fixed frame names.
 
-다음으로 LaserScan의 Frame과 TF Tree를 비교하였다.
+기본 TurtleBot3 SDF는 모든 Frame 이름이 고정되어 있다.
 
-The LaserScan message contained
+For a multi-robot simulation, each robot requires unique frame names.
 
-```
-frame_id
+하지만 Multi-Robot 환경에서는 모든 Robot이 서로 다른 Frame 이름을 가져야 한다.
 
-base_scan
-```
+To solve this problem, the `generate_sdf()` function was implemented.
 
-However, the TF Tree contained
+이를 해결하기 위해 `generate_sdf()` 함수를 작성하였다.
 
-```
-tb3_0/base_scan
+```python
+def generate_sdf(namespace):
 ```
 
-The frame names did not match.
+Instead of manually preparing multiple SDF files, the original model is modified at runtime.
 
-LaserScan Message의 Frame 이름과 TF Tree의 Frame 이름이 서로 달랐다.
+여러 개의 SDF 파일을 미리 준비하는 대신, Launch 시점에 SDF를 동적으로 수정하도록 구현하였다.
 
-RViz transforms every sensor message using TF.
+The following fields are updated automatically.
 
-RViz는 모든 Sensor 데이터를 TF를 이용하여 좌표 변환한 후 화면에 표시한다.
+- `odometry_frame`
+- `robot_base_frame`
+- `frame_name`
 
-Since the frame
+Each frame is prefixed with the robot namespace.
 
-```
-base_scan
-```
-
-did not exist in the TF Tree,
-
-RViz could not transform the LaserScan data.
-
-`base_scan`이라는 Frame은 존재하지 않았기 때문에 RViz가 좌표 변환을 수행하지 못했고, 결국 LaserScan이 표시되지 않았다.
-
-The root cause was therefore identified as a frame mismatch.
-
-결국 문제의 원인은 Frame 이름 불일치였다.
+각 Frame에는 Robot Namespace가 자동으로 추가된다.
 
 ---
 
-# 4. Updating generate_sdf()
+# 3. Updating Sensor Frames
 
-The Gazebo Ray Sensor publishes its frame name from the SDF model.
+One of the modified fields is
 
-Gazebo Ray Sensor는 SDF 파일에 정의된 Frame 이름을 그대로 사용하여 데이터를 Publish한다.
+```xml
+<frame_name>
+```
 
-The original SDF contained
+This field determines the `frame_id` of LaserScan messages.
+
+`frame_name`은 Gazebo가 Publish하는 LaserScan Message의 `frame_id`를 결정한다.
+
+The original model contained
 
 ```xml
 <frame_name>base_scan</frame_name>
 ```
 
-Since every robot used a namespace, the frame name also needed to include the namespace.
+which caused a mismatch with the TF Tree.
 
-모든 Robot이 Namespace를 사용하므로 Sensor의 Frame 이름 역시 Namespace를 포함하도록 수정해야 했다.
+기본 SDF에서는 `base_scan`을 사용하고 있었기 때문에 TF Tree와 이름이 일치하지 않았다.
 
-The following code was added to `generate_sdf()`.
+The frame name was updated dynamically.
 
 ```python
 content = content.replace(
@@ -139,119 +115,122 @@ content = content.replace(
 )
 ```
 
-After this modification, the Gazebo plugin published
+After this modification, the published LaserScan messages matched the TF Tree correctly.
 
-```
-tb3_0/base_scan
-```
-
-instead of
-
-```
-base_scan
-```
-
-As a result, the LaserScan frame became identical to the TF frame.
-
-그 결과 LaserScan의 Frame 이름과 TF Tree의 Frame 이름이 서로 일치하게 되었다.
+수정 이후 LaserScan Message의 `frame_id`와 TF Frame이 일치하게 되었다.
 
 ---
 
-# 5. Verifying the Result
+# 4. Automating Robot Spawning
 
-After rebuilding the workspace and restarting Gazebo,
+A reusable `spawn_robot()` function was implemented.
 
-```bash
-colcon build
+Robot 생성 과정을 자동화하기 위해 `spawn_robot()` 함수를 구현하였다.
 
-source install/setup.bash
+Each robot receives
 
-ros2 launch ...
+- robot name
+- namespace
+- spawn position
+
+as arguments.
+
+Robot 이름, Namespace, Spawn 위치를 인자로 받아 원하는 Robot을 생성하도록 구성하였다.
+
+---
+
+# 5. Publishing Robot States
+
+Each robot also requires its own `robot_state_publisher`.
+
+각 Robot은 독립적인 `robot_state_publisher`를 실행해야 한다.
+
+The following parameter was added.
+
+```python
+frame_prefix
 ```
 
-RViz immediately displayed the LaserScan data.
-
-Workspace를 다시 Build하고 Gazebo를 재실행한 이후 LaserScan이 정상적으로 표시되는 것을 확인하였다.
-
-The same modification was automatically applied to
-
-- tb3_0
-- tb3_1
-- tb3_2
-
-because `generate_sdf()` generates the SDF file dynamically for every robot.
-
-`generate_sdf()`가 각 Robot의 SDF를 동적으로 생성하기 때문에 모든 Robot에 동일한 수정 사항이 적용되었다.
-
-The final visualization correctly displayed
-
-- RobotModel
-- TF Tree
-- LaserScan
-
-for every TurtleBot3.
-
-최종적으로 모든 TurtleBot3의 RobotModel, TF Tree, 그리고 LaserScan이 정상적으로 시각화되는 것을 확인하였다.
-
----
-
-# System Architecture
+As a result, every TF frame became
 
 ```
-                 Gazebo
-                    │
-                    ▼
-          Ray Sensor Plugin
-                    │
-                    ▼
-            /tb3_x/scan
-      frame_id = tb3_x/base_scan
-                    │
-                    ▼
-                  TF Tree
-                    │
-                    ▼
-                 RobotModel
-                    │
-                    ▼
-                  RViz2
+tb3_0/base_link
+
+tb3_1/base_link
+
+tb3_2/base_link
 ```
 
-The Gazebo Ray Sensor publishes LaserScan messages with the correct frame name.
+instead of sharing identical frame names.
 
-RViz uses TF to transform the sensor data into the global coordinate system before visualization.
-
-Gazebo Ray Sensor는 올바른 Frame 이름을 포함한 LaserScan 데이터를 Publish하며, RViz는 TF를 이용하여 이를 기준 좌표계로 변환한 후 화면에 표시한다.
+모든 Robot이 서로 다른 TF Frame을 갖도록 구성하였다.
 
 ---
 
-# Questions & Notes
+# 6. Dynamic Robot Creation using OpaqueFunction
 
-### Why wasn't LaserScan displayed?
+Finally, every robot is generated inside
 
-The LaserScan message itself was published correctly.
+```python
+spawn_robots()
+```
 
-However, its `frame_id` did not exist in the TF Tree.
+using
 
-LaserScan 데이터는 정상적으로 Publish되고 있었지만, `frame_id`가 TF Tree에 존재하지 않아 좌표 변환을 수행할 수 없었다.
+```python
+OpaqueFunction(function=spawn_robots)
+```
+
+The number of robots is obtained from
+
+```python
+num_robots
+```
+
+and all required nodes are generated automatically.
+
+Launch Argument에 따라 Robot 개수만 변경하면 필요한 모든 Node가 자동으로 생성된다.
 
 ---
 
-### Why did modifying `generate_sdf()` solve the problem?
+# 7. Final Launch Architecture
 
-The Gazebo Ray Sensor uses the `<frame_name>` element inside the SDF model as the `frame_id` of the published LaserScan message.
-
-By updating `<frame_name>` to include the robot namespace, the published frame became identical to the TF frame.
-
-Gazebo Sensor Plugin은 SDF의 `<frame_name>`을 LaserScan Message의 `frame_id`로 사용한다. 따라서 Namespace를 포함하도록 수정함으로써 TF Tree와 동일한 Frame 이름을 사용하게 되었고 문제가 해결되었다.
+```
+Launch File
+        │
+        ▼
+OpaqueFunction
+        │
+        ▼
+spawn_robots()
+        │
+        ├──────────────┐
+        ▼              ▼
+spawn_entity     robot_state_publisher
+        │              │
+        ▼              ▼
+generate_sdf()        TF
+        │              │
+        ▼              │
+Gazebo Model           │
+        │              │
+        ├──────────────┘
+        ▼
+static_transform_publisher
+        │
+        ▼
+RViz
+```
 
 ---
 
-### Key Takeaways
+# Key Takeaways
 
-- LaserScan messages require a valid TF frame.
-- The `frame_id` of a sensor message must exactly match a frame in the TF Tree.
-- When using multiple robots with namespaces, sensor frames must also include the namespace.
-- Dynamically modifying the SDF file in `generate_sdf()` provides an efficient solution for multi-robot simulations.
+- Static TFs are generated automatically.
+- SDF files are modified dynamically.
+- Sensor frames are updated automatically.
+- Robot spawning is fully automated.
+- The launch system scales to an arbitrary number of robots.
+- Only the `num_robots` argument needs to be changed to create additional robots.
 
-이번 실습을 통해 Sensor 데이터의 `frame_id`와 TF Tree의 Frame 이름은 반드시 일치해야 하며, Multi-Robot 환경에서는 Sensor Frame에도 Namespace를 적용해야 한다는 점을 확인하였다.
+이번 파트를 통해 Multi-Robot Launch 시스템을 모듈화하고 자동화하여, Robot 수가 증가하더라도 동일한 Launch 파일을 재사용할 수 있는 구조를 구축하였다.
