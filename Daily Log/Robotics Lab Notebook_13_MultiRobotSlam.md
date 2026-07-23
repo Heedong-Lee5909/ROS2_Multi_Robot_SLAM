@@ -309,7 +309,7 @@ The frame names did not match.
 
 # Step 6. Configure Frame Parameters
 
-Before updating the launch file, the current TF tree was inspected.
+Before updating the launch file, the TF tree was inspected.
 
 ```bash
 ros2 run tf2_tools view_frames
@@ -318,11 +318,30 @@ ros2 run tf2_tools view_frames
 The generated TF tree contained
 
 ```
-tb3_0/odom
-tb3_0/base_footprint
+world
+ └── tb3_0/odom
+      └── tb3_0/base_footprint
 ```
 
-but the `tb3_0/map` frame was missing, indicating that the SLAM frame parameters did not match the namespaced TF frames.
+but the `tb3_0/map` frame was missing.
+
+The current frame parameters were then verified.
+
+```bash
+ros2 param get /tb3_0/slam_toolbox odom_frame
+ros2 param get /tb3_0/slam_toolbox base_frame
+ros2 param get /tb3_0/slam_toolbox map_frame
+```
+
+Result
+
+```
+odom
+base_footprint
+map
+```
+
+This confirmed that SLAM Toolbox was using the default frame names instead of the namespaced TF frames.
 
 The launch file was then updated.
 
@@ -338,7 +357,23 @@ parameters=[
 ]
 ```
 
-After restarting SLAM, the TF tree was generated correctly, and RViz displayed
+After restarting the node, the updated parameters were verified.
+
+```bash
+ros2 param get /tb3_0/slam_toolbox odom_frame
+ros2 param get /tb3_0/slam_toolbox base_frame
+ros2 param get /tb3_0/slam_toolbox map_frame
+```
+
+Result
+
+```
+tb3_0/odom
+tb3_0/base_footprint
+tb3_0/map
+```
+
+RViz then recognized
 
 ```
 tb3_0/map
@@ -346,7 +381,7 @@ tb3_0/map
 
 as a valid Fixed Frame.
 
-The Occupancy Grid was also verified using
+The Occupancy Grid was further verified using
 
 ```bash
 ros2 topic echo /map --once
