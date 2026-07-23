@@ -198,7 +198,21 @@ while the actual topic was
 
 # Step 4. Fix scan_topic
 
-The parameter was overridden inside the launch file.
+Before modifying the launch file, the current parameter was verified.
+
+```bash
+ros2 param get /tb3_0/slam_toolbox scan_topic
+```
+
+Result
+
+```
+/scan
+```
+
+This confirmed that SLAM Toolbox was subscribing to the default absolute topic instead of the namespaced LaserScan topic.
+
+The parameter was then overridden inside the launch file.
 
 ```python
 parameters=[
@@ -209,7 +223,7 @@ parameters=[
 ]
 ```
 
-Verification
+After restarting the node, the updated parameter was verified.
 
 ```bash
 ros2 param get /tb3_0/slam_toolbox scan_topic
@@ -221,7 +235,7 @@ Result
 /tb3_0/scan
 ```
 
-Checking
+Finally, the topic connection was confirmed.
 
 ```bash
 ros2 topic info /tb3_0/scan
@@ -234,7 +248,7 @@ Publisher : 1
 Subscriber : 1
 ```
 
-The SLAM node successfully subscribed to LaserScan.
+The SLAM node successfully subscribed to the LaserScan topic.
 
 ---
 
@@ -295,7 +309,22 @@ The frame names did not match.
 
 # Step 6. Configure Frame Parameters
 
-The launch file was updated.
+Before updating the launch file, the current TF tree was inspected.
+
+```bash
+ros2 run tf2_tools view_frames
+```
+
+The generated TF tree contained
+
+```
+tb3_0/odom
+tb3_0/base_footprint
+```
+
+but the `tb3_0/map` frame was missing, indicating that the SLAM frame parameters did not match the namespaced TF frames.
+
+The launch file was then updated.
 
 ```python
 parameters=[
@@ -309,15 +338,27 @@ parameters=[
 ]
 ```
 
-After restarting SLAM,
-
-RViz displayed
+After restarting SLAM, the TF tree was generated correctly, and RViz displayed
 
 ```
 tb3_0/map
 ```
 
 as a valid Fixed Frame.
+
+The Occupancy Grid was also verified using
+
+```bash
+ros2 topic echo /map --once
+```
+
+Result
+
+```
+frame_id: tb3_0/map
+```
+
+confirming that SLAM Toolbox was publishing the map using the correct frame.
 
 ---
 
