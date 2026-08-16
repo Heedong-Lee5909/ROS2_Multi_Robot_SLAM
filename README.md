@@ -131,7 +131,7 @@ The following figure shows the Gazebo simulation and RViz2 visualization during 
 다음 그림은 autonomous exploration 수행 중 Gazebo simulation과 RViz2 visualization을 나타낸다.
 
 <p align="center">
-  <img src="Daily%20Log/images/multi_robot_slam_autonomous_exploration.png" width="100%">
+  <img src="Daily%20Log/images/Multi-Robot SLAM Result_1.png" width="100%">
 </p>
 
 Three TurtleBot3 robots independently perform LiDAR-based reactive exploration while their local SLAM maps are continuously generated and merged into the global `/merged_map`.
