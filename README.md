@@ -55,30 +55,39 @@ The project was developed incrementally with the following objectives:
 본 프로젝트는 다음과 같은 objectives를 단계적으로 구현하는 방식으로 개발하였다.
 
 1. Build a multi-robot simulation environment using TurtleBot3.
+
    TurtleBot3를 이용하여 multi-robot simulation environment를 구축한다.
 
 2. Configure independent ROS2 namespaces and TF frames for each robot.
+
    각 robot에 independent ROS2 namespace와 TF frame을 구성한다.
 
 3. Run independent SLAM Toolbox instances for all three robots.
+
    3대의 robot에서 independent SLAM Toolbox instance를 실행한다.
 
 4. Generate an individual occupancy grid map for each robot.
+
    각 robot에 대한 individual occupancy grid map을 생성한다.
 
 5. Establish a common `world` coordinate frame for multi-robot map alignment.
+
    Multi-robot map alignment를 위한 공통 `world` coordinate frame을 구성한다.
 
 6. Transform and merge individual maps into a global `/merged_map`.
+
    Individual map을 transform하여 global `/merged_map`으로 merge한다.
 
 7. Implement LiDAR-based autonomous movement.
+
    LiDAR-based autonomous movement를 구현한다.
 
 8. Enable all three robots to perform autonomous exploration simultaneously.
+
    3대의 robot이 동시에 autonomous exploration을 수행할 수 있도록 구성한다.
 
 9. Evaluate the limitations of reactive exploration and identify directions for future cooperative exploration.
+
    Reactive exploration의 limitations을 평가하고 향후 cooperative exploration으로 확장하기 위한 방향을 도출한다.
 
 ---
