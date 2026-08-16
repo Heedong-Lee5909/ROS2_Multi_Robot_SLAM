@@ -122,7 +122,7 @@ The overall system consists of four major components:
                        /merged_map
                            │
                          RViz2
-```text
+```
 
 # Result
 
